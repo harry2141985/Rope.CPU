@@ -769,8 +769,21 @@ class GUI(tk.Tk):
         except:
             self.json_dict['dock_win_geom'] = self.json_dict['dock_win_geom']
 
-        # Initialize the window sizes and positions
-        self.geometry('%dx%d+%d+%d' % (self.json_dict['dock_win_geom'][0], self.json_dict['dock_win_geom'][1] , self.json_dict['dock_win_geom'][2], self.json_dict['dock_win_geom'][3]))
+        # 计算窗口居中位置
+        window_width = self.json_dict['dock_win_geom'][0]
+        window_height = self.json_dict['dock_win_geom'][1]
+        screen_width = self.winfo_screenwidth()
+        screen_height = self.winfo_screenheight()
+        
+        x = (screen_width - window_width) // 2
+        y = (screen_height - window_height) // 2
+        
+        # 更新窗口位置
+        self.json_dict['dock_win_geom'][2] = x
+        self.json_dict['dock_win_geom'][3] = y
+
+        # Initialize the window sizes and positions 
+        self.geometry('%dx%d+%d+%d' % (window_width, window_height, x, y))
         self.window_last_change = self.winfo_geometry()
 
         self.bind('<Key>', lambda event: self.preview_control(event))
@@ -915,123 +928,101 @@ class GUI(tk.Tk):
         self.load_input_faces()
 
     def load_input_faces(self):
+        # 使用之前定义的get_device()函数获取设备
+        device = self.models.device  # 从Models实例中获取设备设置
+        
+        # 清除现有的source faces
         self.source_faces = []
-        self.merged_faces_canvas.delete("all")
         self.source_faces_canvas.delete("all")
-
-        # First load merged embeddings
-        try:
-            temp0 = []
+        
+        # 读取merged_embeddings.txt
+        temp0 = []
+        if os.path.exists("merged_embeddings.txt"):
             with open("merged_embeddings.txt", "r") as embedfile:
                 temp = embedfile.read().splitlines()
-
+                
                 for i in range(0, len(temp), 513):
-                    to = [temp[i][6:], np.array(temp[i+1:i+513], dtype='float32')]
+                    to = [temp[i], np.array(temp[i+1:i+513], dtype='float32')]
                     temp0.append(to)
-
-            for j in range(len(temp0)):
-                new_source_face = self.source_face.copy()
-                self.source_faces.append(new_source_face)
-
-                self.source_faces[j]["ButtonState"] = False
-                self.source_faces[j]["Embedding"] = temp0[j][1]
-                self.source_faces[j]["TKButton"] = tk.Button(self.merged_faces_canvas, style.media_button_off_3, image=self.blank, text=temp0[j][0], height=14, width=84, compound='left')
-
-                self.source_faces[j]["TKButton"].bind("<ButtonRelease-1>", lambda event, arg=j: self.select_input_faces(event, arg))
-                self.source_faces[j]["TKButton"].bind("<MouseWheel>", lambda event: self.merged_faces_canvas.xview_scroll(-int(event.delta/120.0), "units"))
-
-                self.merged_faces_canvas.create_window((j//4)*92,8+(22*(j%4)), window = self.source_faces[j]["TKButton"],anchor='nw')
-
-            self.merged_faces_canvas.configure(scrollregion = self.merged_faces_canvas.bbox("all"))
-            self.merged_faces_canvas.xview_moveto(0)
-
-        except:
-            pass
-
-        self.shift_i_len = len(self.source_faces)
-
-        # Next Load images
+                    
+        # 读取文件夹中的图片
         directory = self.json_dict["source faces"]
         filenames = [os.path.join(dirpath,f) for (dirpath, dirnames, filenames) in os.walk(directory) for f in filenames]
-
-        # torch.cuda.memory._record_memory_history(True, trace_alloc_max_entries=100000, trace_alloc_record_context=True)
-        i=0
-        for file in filenames: # Does not include full path
-            # Find all faces and ad to faces[]
-            # Guess File type based on extension
+        
+        for file in filenames:
             try:
                 file_type = mimetypes.guess_type(file)[0][:5]
             except:
                 print('Unrecognized file type:', file)
             else:
-                # Its an image
                 if file_type == 'image':
-                    img = cv2.imread(file)
-
-                    if img is not None:
-                        img = torch.from_numpy(img.astype('uint8')).to('cuda')
-
-                        pad_scale = 0.2
-                        padded_width = int(img.size()[1]*(1.+pad_scale))
-                        padded_height = int(img.size()[0]*(1.+pad_scale))
-
-                        padding = torch.zeros((padded_height, padded_width, 3), dtype=torch.uint8, device='cuda:0')
-
-                        width_start = int(img.size()[1]*pad_scale/2)
-                        width_end = width_start+int(img.size()[1])
-                        height_start = int(img.size()[0]*pad_scale/2)
-                        height_end = height_start+int(img.size()[0])
-
-                        padding[height_start:height_end, width_start:width_end,  :] = img
-                        img = padding
-
+                    try:
+                        img = cv2.imread(file)
+                        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                    except:
+                        print('Trouble reading file:', file)
+                    else:
+                        # 修改这里，使用正确的设备
+                        img = torch.from_numpy(img.astype('uint8')).to(device)
                         img = img.permute(2,0,1)
-                        try:
-                            kpss = self.models.run_detect(img, max_num=1)[0] # Just one face here
-                        except IndexError:
-                            print('Image cropped too close:', file)
-                        else:
-                            face_emb, cropped_image = self.models.run_recognize(img, kpss)
-                            crop = cv2.cvtColor(cropped_image.cpu().numpy(), cv2.COLOR_BGR2RGB)
-                            crop = cv2.resize(crop, (85, 85))
-
+                        kpss = self.models.run_detect(img)
+                        
+                        if len(kpss)>0:
+                            face_emb, cropped_img = self.models.run_recognize(img, kpss[0])
+                            
+                            ratio = float(cropped_img.shape[0]) / cropped_img.shape[1]
+                            new_height = 50
+                            new_width = int(new_height / ratio)
+                            cropped_img = cv2.resize(cropped_img.cpu().numpy(), (new_width, new_height))
+                            
                             new_source_face = self.source_face.copy()
                             self.source_faces.append(new_source_face)
-
-                            self.source_faces[-1]["Image"] = ImageTk.PhotoImage(image=Image.fromarray(crop))
-                            self.source_faces[-1]["Embedding"] = face_emb
-                            self.source_faces[-1]["TKButton"] = tk.Button(self.source_faces_canvas, style.media_button_off_3, image=self.source_faces[-1]["Image"], height=90, width=90)
-                            self.source_faces[-1]["ButtonState"] = False
-                            self.source_faces[-1]["file"] = file
-
-                            self.source_faces[-1]["TKButton"].bind("<ButtonRelease-1>", lambda event, arg=len(self.source_faces)-1: self.select_input_faces(event, arg))
-                            self.source_faces[-1]["TKButton"].bind("<MouseWheel>", self.source_faces_mouse_wheel)
-
-                            self.source_faces_canvas.create_window((i % 2) * 100, (i // 2) * 100, window=self.source_faces[-1]["TKButton"], anchor='nw')
-
-                            self.static_widget['input_faces_scrollbar'].resize_scrollbar(None)
-                            i = i + 1
-
-                    else:
-                        print('Bad file', file)
-
-
-        torch.cuda.empty_cache()
+                            last_index = len(self.source_faces)-1
+                            
+                            self.source_faces[last_index]["TKButton"] = tk.Button(self.source_faces_canvas, style.media_button_off_3, height = 86, width = 86)
+                            self.source_faces[last_index]["TKButton"].bind("<MouseWheel>", self.source_faces_mouse_wheel)
+                            self.source_faces[last_index]["ButtonState"] = False
+                            self.source_faces[last_index]["Image"] = ImageTk.PhotoImage(image=Image.fromarray(cropped_img))
+                            self.source_faces[last_index]["Embedding"] = face_emb
+                            self.source_faces[last_index]["file"] = file
+                            
+                            # Add image to button
+                            self.source_faces[-1]["TKButton"].config( pady = 10, image = self.source_faces[last_index]["Image"], command=lambda k=last_index: self.select_input_faces('none', k))
+                            
+                            # Add button to canvas
+                            self.source_faces_canvas.create_window((last_index//2)*92, (last_index%2)*92, window=self.source_faces[last_index]["TKButton"], anchor='nw')
+                            
+                            self.source_faces_canvas.configure(scrollregion = self.source_faces_canvas.bbox("all"))
+                            
+        # Add merged embeddings
+        for i in range(len(temp0)):
+            new_source_face = self.source_face.copy()
+            self.source_faces.append(new_source_face)
+            last_index = len(self.source_faces)-1
+            
+            self.source_faces[last_index]["TKButton"] = tk.Button(self.source_faces_canvas, style.media_button_off_3, height = 86, width = 86)
+            self.source_faces[last_index]["TKButton"].bind("<MouseWheel>", self.source_faces_mouse_wheel)
+            self.source_faces[last_index]["ButtonState"] = False
+            self.source_faces[last_index]["Image"] = ImageTk.PhotoImage(image=Image.fromarray(np.zeros((50,50,3), dtype=np.uint8)))
+            self.source_faces[last_index]["Embedding"] = temp0[i][1]
+            
+            # Add image to button
+            self.source_faces[-1]["TKButton"].config( pady = 10, image = self.source_faces[last_index]["Image"], text=temp0[i][0][6:], compound='center', command=lambda k=last_index: self.select_input_faces('none', k))
+            
+            # Add button to canvas
+            self.source_faces_canvas.create_window((last_index//2)*92, (last_index%2)*92, window=self.source_faces[last_index]["TKButton"], anchor='nw')
+            
+            self.source_faces_canvas.configure(scrollregion = self.source_faces_canvas.bbox("all"))
 
     def find_faces(self):
         try:
-            img = torch.from_numpy(self.video_image).to('cuda')
+            # 使用self.models.device替代硬编码的'cuda'
+            img = torch.from_numpy(self.video_image).to(self.models.device)
             img = img.permute(2,0,1)
             kpss = self.models.run_detect(img, max_num=50)
 
-
             ret = []
             for face_kps in kpss:
-
-                # if kpss is not None:
-                #     face_kps = kpss[i]
-
-
                 face_emb, cropped_img = self.models.run_recognize(img, face_kps)
                 ret.append([face_kps, face_emb, cropped_img])
 

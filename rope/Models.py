@@ -1,22 +1,27 @@
-
 import cv2
 import numpy as np
 from skimage import transform as trans
 import torch
 import torchvision
-torchvision.disable_beta_transforms_warning()
 from torchvision.transforms import v2
 from numpy.linalg import norm as l2norm
 import onnxruntime
 import onnx
 from itertools import product as product
 import subprocess as sp
+import onnxruntime.capi.onnxruntime_pybind11_state as C
 onnxruntime.set_default_logger_severity(4)
+
+# 定义一个设备选择函数
+def get_device():
+    return 'cuda:0' if torch.cuda.is_available() else 'cpu'
 
 class Models():
     def __init__(self): 
-        self.arcface_dst = np.array( [[38.2946, 51.6963], [73.5318, 51.5014], [56.0252, 71.7366], [41.5493, 92.3655], [70.7299, 92.2041]], dtype=np.float32) 
-        self.providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
+        self.device = get_device()
+        self.arcface_dst = np.array([[38.2946, 51.6963], [73.5318, 51.5014], [56.0252, 71.7366], [41.5493, 92.3655], [70.7299, 92.2041]], dtype=np.float32)
+        # 修改providers以支持CPU
+        self.providers = ['CPUExecutionProvider'] if self.device == 'cpu' else ['CUDAExecutionProvider', 'CPUExecutionProvider']
         
         self.retinaface_model = []
         self.yoloface_model = []
@@ -39,7 +44,7 @@ class Models():
         self.occluder_model = []
         self.faceparser_model = []
         
-        self.syncvec = torch.empty((1,1), dtype=torch.float32, device='cuda:0')
+        self.syncvec = torch.empty((1,1), dtype=torch.float32, device=self.device)
         
     def get_gpu_memory(self):
         command = "nvidia-smi --query-gpu=memory.total --format=csv"
@@ -128,14 +133,41 @@ class Models():
             sess_options = onnxruntime.SessionOptions()
             sess_options.enable_cpu_mem_arena = False
             
-            # self.swapper_model = onnxruntime.InferenceSession( "./models/inswapper_128_last_cubic.onnx", sess_options, providers=[('CUDAExecutionProvider', cuda_options), 'CPUExecutionProvider'])
-            
-            self.swapper_model = onnxruntime.InferenceSession( "./models/inswapper_128.fp16.onnx", providers=self.providers)
+            self.swapper_model = onnxruntime.InferenceSession(
+                "./models/inswapper_128.fp16.onnx", 
+                providers=self.providers
+            )
 
         io_binding = self.swapper_model.io_binding()
-        io_binding.bind_input(name='target', device_type='cuda', device_id=0, element_type=np.float32, shape=(1,3,128,128), buffer_ptr=image.data_ptr())
-        io_binding.bind_input(name='source', device_type='cuda', device_id=0, element_type=np.float32, shape=(1,512), buffer_ptr=embedding.data_ptr())
-        io_binding.bind_output(name='output', device_type='cuda', device_id=0, element_type=np.float32, shape=(1,3,128, 128), buffer_ptr=output.data_ptr())
+        device_type = 'cuda' if torch.cuda.is_available() else 'cpu'
+        device_id = 0
+
+        io_binding.bind_input(
+            name='target',
+            device_type=device_type,
+            device_id=device_id,
+            element_type=np.float32,
+            shape=(1,3,128,128),
+            buffer_ptr=image.data_ptr()
+        )
+        
+        io_binding.bind_input(
+            name='source',
+            device_type=device_type,
+            device_id=device_id,
+            element_type=np.float32,
+            shape=(1,512),
+            buffer_ptr=embedding.data_ptr()
+        )
+        
+        io_binding.bind_output(
+            name='output',
+            device_type=device_type,
+            device_id=device_id,
+            element_type=np.float32,
+            shape=(1,3,128,128),
+            buffer_ptr=output.data_ptr()
+        )
 
         self.syncvec.cpu()
         self.swapper_model.run_with_iobinding(io_binding)
@@ -299,7 +331,6 @@ class Models():
     
         
     def detect_retinaface(self, img, max_num, score):
-
         # Resize image to fit within the input_size
         input_size = (640, 640)
         im_ratio = torch.div(img.size()[1], img.size()[2])
@@ -318,7 +349,8 @@ class Models():
         img = resize(img)
         img = img.permute(1,2,0)
 
-        det_img = torch.zeros((input_size[1], input_size[0], 3), dtype=torch.float32, device='cuda:0')
+        # 使用self.device替代硬编码的'cuda:0'
+        det_img = torch.zeros((input_size[1], input_size[0], 3), dtype=torch.float32, device=self.device)
         det_img[:new_height,:new_width,  :] = img
 
         # Switch to BGR and normalize
@@ -330,25 +362,17 @@ class Models():
         # Prepare data and find model parameters 
         det_img = torch.unsqueeze(det_img, 0).contiguous()
 
-        io_binding = self.retinaface_model.io_binding() 
-        io_binding.bind_input(name='input.1', device_type='cuda', device_id=0, element_type=np.float32,  shape=det_img.size(), buffer_ptr=det_img.data_ptr())
+        io_binding = self.retinaface_model.io_binding()
+        self._bind_model_io(
+            io_binding,
+            'input.1',
+            det_img,
+            ['448', '471', '494', '451', '474', '497', '454', '477', '500']
+        )
 
-        io_binding.bind_output('448', 'cuda') 
-        io_binding.bind_output('471', 'cuda') 
-        io_binding.bind_output('494', 'cuda') 
-        io_binding.bind_output('451', 'cuda') 
-        io_binding.bind_output('474', 'cuda') 
-        io_binding.bind_output('497', 'cuda') 
-        io_binding.bind_output('454', 'cuda') 
-        io_binding.bind_output('477', 'cuda') 
-        io_binding.bind_output('500', 'cuda') 
-        
-        
         # Sync and run model
         self.syncvec.cpu()        
         self.retinaface_model.run_with_iobinding(io_binding)
-
-
 
         net_outs = io_binding.copy_outputs_to_cpu()
 
@@ -696,7 +720,7 @@ class Models():
         img = resize(img)
         img = img.permute(1,2,0)
 
-        det_img = torch.zeros((input_size[1], input_size[0], 3), dtype=torch.float32, device='cuda:0')
+        det_img = torch.zeros((input_size[1], input_size[0], 3), dtype=torch.float32, device=self.device)
         det_img[:new_height,:new_width,  :] = img
 
         # Switch to BGR and normalize
@@ -707,21 +731,25 @@ class Models():
         
         # Prepare data and find model parameters 
         det_img = torch.unsqueeze(det_img, 0).contiguous()
-        input_name = self.scrdf_model.get_inputs()[0].name
-        
-        outputs = self.scrdf_model.get_outputs()
-        output_names = []
-        for o in outputs:
-            output_names.append(o.name)
         
         io_binding = self.scrdf_model.io_binding() 
-        io_binding.bind_input(name=input_name, device_type='cuda', device_id=0, element_type=np.float32,  shape=det_img.size(), buffer_ptr=det_img.data_ptr())
+        device_type = 'cuda' if torch.cuda.is_available() else 'cpu'
+        device_id = 0 if device_type == 'cuda' else None
         
-        for i in range(len(output_names)):
-            io_binding.bind_output(output_names[i], 'cuda') 
+        io_binding.bind_input(
+            name='input.1',
+            device_type=device_type,
+            device_id=device_id,
+            element_type=np.float32,
+            shape=det_img.size(),
+            buffer_ptr=det_img.data_ptr()
+        )
+        
+        for output_name in ['601', '624', '647', '604', '627', '650', '607', '630', '653']:
+            io_binding.bind_output(output_name, device_type)
         
         # Sync and run model
-        syncvec = self.syncvec.cpu()        
+        self.syncvec.cpu()        
         self.scrdf_model.run_with_iobinding(io_binding)
         
         net_outs = io_binding.copy_outputs_to_cpu()
@@ -827,8 +855,7 @@ class Models():
         kpss = kpss[keep,:,:]
 
         if max_num > 0 and det.shape[0] > max_num:
-            area = (det[:, 2] - det[:, 0]) * (det[:, 3] -
-                                                    det[:, 1])
+            area = (det[:, 2] - det[:, 0]) * (det[:, 3] - det[:, 1])
             det_img_center = det_img.shape[0] // 2, det_img.shape[1] // 2
             offsets = np.vstack([
                 (det[:, 0] + det[:, 2]) / 2 - det_img_center[1],
@@ -851,7 +878,7 @@ class Models():
         width = img.size(dim=2)
         length = max((height, width))
 
-        image = torch.zeros((length, length, 3), dtype=torch.uint8, device='cuda')
+        image = torch.zeros((length, length, 3), dtype=torch.uint8, device=self.device)
         img = img.permute(1,2,0)
 
         image[0:height, 0:width] = img
@@ -865,8 +892,18 @@ class Models():
         image = torch.unsqueeze(image, 0).contiguous()
 
         io_binding = self.yoloface_model.io_binding()
-        io_binding.bind_input(name='images', device_type='cuda', device_id=0, element_type=np.float32,  shape=image.size(), buffer_ptr=image.data_ptr())
-        io_binding.bind_output('output0', 'cuda')
+        device_type = 'cuda' if torch.cuda.is_available() else 'cpu'
+        device_id = 0 if device_type == 'cuda' else None
+
+        io_binding.bind_input(
+            name='images',
+            device_type=device_type,
+            device_id=device_id,
+            element_type=np.float32,
+            shape=image.size(),
+            buffer_ptr=image.data_ptr()
+        )
+        io_binding.bind_output('output0', device_type)
 
         # Sync and run model
         self.syncvec.cpu()
@@ -914,8 +951,7 @@ class Models():
         width = img.size(dim=2)
         length = max((height, width))
 
-        image = torch.zeros((length, length, 3), dtype=torch.uint8,
-                            device='cuda')
+        image = torch.zeros((length, length, 3), dtype=torch.uint8, device=self.device)
         img = img.permute(1, 2, 0)
 
         image[0:height, 0:width] = img
@@ -929,10 +965,18 @@ class Models():
         image = torch.unsqueeze(image, 0).contiguous()
 
         io_binding = self.yoloface_model.io_binding()
-        io_binding.bind_input(name='images', device_type='cuda', device_id=0,
-                              element_type=np.float32, shape=image.size(),
-                              buffer_ptr=image.data_ptr())
-        io_binding.bind_output('output0', 'cuda')
+        device_type = 'cuda' if torch.cuda.is_available() else 'cpu'
+        device_id = 0 if device_type == 'cuda' else None
+
+        io_binding.bind_input(
+            name='images',
+            device_type=device_type,
+            device_id=device_id,
+            element_type=np.float32,
+            shape=image.size(),
+            buffer_ptr=image.data_ptr()
+        )
+        io_binding.bind_output('output0', device_type)
 
         # Sync and run model
         self.syncvec.cpu()
@@ -950,8 +994,7 @@ class Models():
         keep_indices = np.where(score_raw > score)[0]
 
         if keep_indices.any():
-            bbox_raw, kps_raw, score_raw = bbox_raw[keep_indices], kps_raw[
-                keep_indices], score_raw[keep_indices]
+            bbox_raw, kps_raw, score_raw = bbox_raw[keep_indices], kps_raw[keep_indices], score_raw[keep_indices]
             for bbox in bbox_raw:
                 bbox_list.append(np.array(
                     [(bbox[0] - bbox[2] / 2), (bbox[1] - bbox[3] / 2),
@@ -999,7 +1042,7 @@ class Models():
         width = img.size(dim=2)
         length = max((height, width))
 
-        image = torch.zeros((length, length, 3), dtype=torch.uint8, device='cuda')
+        image = torch.zeros((length, length, 3), dtype=torch.uint8, device=self.device)
         img = img.permute(1,2,0)
 
         image[0:height, 0:width] = img
@@ -1166,10 +1209,23 @@ class Models():
             output_names.append(o.name)
         
         io_binding = self.recognition_model.io_binding() 
-        io_binding.bind_input(name=input_name, device_type='cuda', device_id=0, element_type=np.float32,  shape=img.size(), buffer_ptr=img.data_ptr())
-
-        for i in range(len(output_names)):
-            io_binding.bind_output(output_names[i], 'cuda') 
+        
+        # 修改设备绑定方式
+        device_type = 'cuda' if torch.cuda.is_available() else 'cpu'
+        device_id = 0
+        
+        io_binding.bind_input(
+            name=input_name,
+            device_type=device_type,
+            device_id=device_id,
+            element_type=np.float32,
+            shape=img.size(),
+            buffer_ptr=img.data_ptr()
+        )
+        
+        # 使用相同的device_type绑定所有输出
+        for name in output_names:
+            io_binding.bind_output(name, device_type)
         
         # Sync and run model
         self.syncvec.cpu()
@@ -1202,7 +1258,7 @@ class Models():
         image = image.permute(1,2,0)
         
         # image = image - [104, 117, 123]
-        mean = torch.tensor([104, 117, 123], dtype=torch.float32, device='cuda')
+        mean = torch.tensor([104, 117, 123], dtype=torch.float32, device=self.device)
         image = torch.sub(image, mean)
         
         # image = image.transpose(2, 0, 1)
@@ -1213,16 +1269,40 @@ class Models():
 
         height, width = (512, 512)
         tmp = [width, height, width, height, width, height, width, height, width, height]
-        scale1 = torch.tensor(tmp, dtype=torch.float32, device='cuda')
+        scale1 = torch.tensor(tmp, dtype=torch.float32, device=self.device)
         
         # ort_inputs = {"input": image}        
-        conf = torch.empty((1,10752,2), dtype=torch.float32, device='cuda').contiguous()
-        landmarks = torch.empty((1,10752,10), dtype=torch.float32, device='cuda').contiguous()
+        conf = torch.empty((1,10752,2), dtype=torch.float32, device=self.device).contiguous()
+        landmarks = torch.empty((1,10752,10), dtype=torch.float32, device=self.device).contiguous()
 
         io_binding = self.resnet50_model.io_binding() 
-        io_binding.bind_input(name='input', device_type='cuda', device_id=0, element_type=np.float32, shape=(1,3,512,512), buffer_ptr=image.data_ptr())
-        io_binding.bind_output(name='conf', device_type='cuda', device_id=0, element_type=np.float32, shape=(1,10752,2), buffer_ptr=conf.data_ptr())
-        io_binding.bind_output(name='landmarks', device_type='cuda', device_id=0, element_type=np.float32, shape=(1,10752,10), buffer_ptr=landmarks.data_ptr())
+        device_type = 'cuda' if torch.cuda.is_available() else 'cpu'
+        device_id = 0 if device_type == 'cuda' else None
+        
+        io_binding.bind_input(
+            name='input',
+            device_type=device_type,
+            device_id=device_id,
+            element_type=np.float32,
+            shape=(1,3,512,512),
+            buffer_ptr=image.data_ptr()
+        )
+        io_binding.bind_output(
+            name='conf',
+            device_type=device_type,
+            device_id=device_id,
+            element_type=np.float32,
+            shape=(1,10752,2),
+            buffer_ptr=conf.data_ptr()
+        )
+        io_binding.bind_output(
+            name='landmarks',
+            device_type=device_type,
+            device_id=device_id,
+            element_type=np.float32,
+            shape=(1,10752,10),
+            buffer_ptr=landmarks.data_ptr()
+        )
         
         # _, conf, landmarks = self.resnet_model.run(None, ort_inputs)        
         torch.cuda.synchronize('cuda')
@@ -1237,7 +1317,7 @@ class Models():
         # landmarks = landmarks.to('cuda')        
 
         priors = torch.tensor(self.anchors).view(-1, 4)
-        priors = priors.to('cuda')
+        priors = priors.to(self.device)
 
         # pre = landmarks.squeeze(0) 
         pre = torch.squeeze(landmarks, 0)
@@ -1261,3 +1341,21 @@ class Models():
         landmarks = landmarks[order][0]
 
         return np.array([[landmarks[i], landmarks[i + 1]] for i in range(0,10,2)])
+
+    def _bind_model_io(self, io_binding, input_name, input_tensor, output_names):
+        """通用的模型IO绑定方法"""
+        # 直接使用字符串类型的设备标识
+        device_type = 'cuda' if torch.cuda.is_available() else 'cpu'
+        device_id = 0
+        
+        io_binding.bind_input(
+            name=input_name,
+            device_type=device_type,
+            device_id=device_id,
+            element_type=np.float32,
+            shape=input_tensor.size(),
+            buffer_ptr=input_tensor.data_ptr()
+        )
+        
+        for name in output_names:
+            io_binding.bind_output(name, device_type)
