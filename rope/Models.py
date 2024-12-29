@@ -14,14 +14,14 @@ onnxruntime.set_default_logger_severity(4)
 
 # 定义一个设备选择函数
 def get_device():
-    return 'cuda:0' if torch.cuda.is_available() else 'cpu'
+    return 'cpu'  # Always return CPU
 
 class Models():
     def __init__(self): 
-        self.device = get_device()
+        self.device = 'cpu'  # Force CPU
         self.arcface_dst = np.array([[38.2946, 51.6963], [73.5318, 51.5014], [56.0252, 71.7366], [41.5493, 92.3655], [70.7299, 92.2041]], dtype=np.float32)
         # 修改providers以支持CPU
-        self.providers = ['CPUExecutionProvider'] if self.device == 'cpu' else ['CUDAExecutionProvider', 'CPUExecutionProvider']
+        self.providers = ['CPUExecutionProvider']  # CPU only
         
         self.retinaface_model = []
         self.yoloface_model = []
@@ -44,7 +44,7 @@ class Models():
         self.occluder_model = []
         self.faceparser_model = []
         
-        self.syncvec = torch.empty((1,1), dtype=torch.float32, device=self.device)
+        self.syncvec = torch.empty((1,1), dtype=torch.float32)  # Remove device specification
         
     def get_gpu_memory(self):
         command = "nvidia-smi --query-gpu=memory.total --format=csv"
@@ -139,7 +139,7 @@ class Models():
             )
 
         io_binding = self.swapper_model.io_binding()
-        device_type = 'cuda' if torch.cuda.is_available() else 'cpu'
+        device_type = 'cpu'
         device_id = 0
 
         io_binding.bind_input(
@@ -180,33 +180,33 @@ class Models():
 
         # Wacky data structure
         io_binding = self.swapper_model_kps.io_binding()
-        kps_1 = torch.ones((1, 2048), dtype=torch.float16, device='cuda').contiguous()
-        kps_2 = torch.ones((1, 2048), dtype=torch.float16, device='cuda').contiguous()
-        kps_3 = torch.ones((1, 2048), dtype=torch.float16, device='cuda').contiguous()
-        kps_4 = torch.ones((1, 2048), dtype=torch.float16, device='cuda').contiguous()
-        kps_5 = torch.ones((1, 2048), dtype=torch.float16, device='cuda').contiguous()
-        kps_6 = torch.ones((1, 2048), dtype=torch.float16, device='cuda').contiguous()
-        kps_7 = torch.ones((1, 2048), dtype=torch.float16, device='cuda').contiguous()
-        kps_8 = torch.ones((1, 2048), dtype=torch.float16, device='cuda').contiguous()
-        kps_9 = torch.ones((1, 2048), dtype=torch.float16, device='cuda').contiguous()
-        kps_10 = torch.ones((1, 2048), dtype=torch.float16, device='cuda').contiguous()
-        kps_11 = torch.ones((1, 2048), dtype=torch.float16, device='cuda').contiguous()
-        kps_12 = torch.ones((1, 2048), dtype=torch.float16, device='cuda').contiguous()
+        kps_1 = torch.ones((1, 2048), dtype=torch.float16, device='cpu').contiguous()
+        kps_2 = torch.ones((1, 2048), dtype=torch.float16, device='cpu').contiguous()
+        kps_3 = torch.ones((1, 2048), dtype=torch.float16, device='cpu').contiguous()
+        kps_4 = torch.ones((1, 2048), dtype=torch.float16, device='cpu').contiguous()
+        kps_5 = torch.ones((1, 2048), dtype=torch.float16, device='cpu').contiguous()
+        kps_6 = torch.ones((1, 2048), dtype=torch.float16, device='cpu').contiguous()
+        kps_7 = torch.ones((1, 2048), dtype=torch.float16, device='cpu').contiguous()
+        kps_8 = torch.ones((1, 2048), dtype=torch.float16, device='cpu').contiguous()
+        kps_9 = torch.ones((1, 2048), dtype=torch.float16, device='cpu').contiguous()
+        kps_10 = torch.ones((1, 2048), dtype=torch.float16, device='cpu').contiguous()
+        kps_11 = torch.ones((1, 2048), dtype=torch.float16, device='cpu').contiguous()
+        kps_12 = torch.ones((1, 2048), dtype=torch.float16, device='cpu').contiguous()
 
         # Bind the data structures
-        io_binding.bind_input(name='source', device_type='cuda', device_id=0, element_type=np.float32, shape=(1, 512), buffer_ptr=embedding.data_ptr())
-        io_binding.bind_output(name='1', device_type='cuda', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=kps_1.data_ptr())
-        io_binding.bind_output(name='2', device_type='cuda', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=kps_2.data_ptr())
-        io_binding.bind_output(name='3', device_type='cuda', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=kps_3.data_ptr())
-        io_binding.bind_output(name='4', device_type='cuda', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=kps_4.data_ptr())
-        io_binding.bind_output(name='5', device_type='cuda', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=kps_5.data_ptr())
-        io_binding.bind_output(name='6', device_type='cuda', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=kps_6.data_ptr())
-        io_binding.bind_output(name='7', device_type='cuda', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=kps_7.data_ptr())
-        io_binding.bind_output(name='8', device_type='cuda', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=kps_8.data_ptr())
-        io_binding.bind_output(name='9', device_type='cuda', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=kps_9.data_ptr())
-        io_binding.bind_output(name='10', device_type='cuda', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=kps_10.data_ptr())
-        io_binding.bind_output(name='11', device_type='cuda', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=kps_11.data_ptr())
-        io_binding.bind_output(name='12', device_type='cuda', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=kps_12.data_ptr())
+        io_binding.bind_input(name='source', device_type='cpu', device_id=0, element_type=np.float32, shape=(1, 512), buffer_ptr=embedding.data_ptr())
+        io_binding.bind_output(name='1', device_type='cpu', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=kps_1.data_ptr())
+        io_binding.bind_output(name='2', device_type='cpu', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=kps_2.data_ptr())
+        io_binding.bind_output(name='3', device_type='cpu', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=kps_3.data_ptr())
+        io_binding.bind_output(name='4', device_type='cpu', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=kps_4.data_ptr())
+        io_binding.bind_output(name='5', device_type='cpu', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=kps_5.data_ptr())
+        io_binding.bind_output(name='6', device_type='cpu', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=kps_6.data_ptr())
+        io_binding.bind_output(name='7', device_type='cpu', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=kps_7.data_ptr())
+        io_binding.bind_output(name='8', device_type='cpu', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=kps_8.data_ptr())
+        io_binding.bind_output(name='9', device_type='cpu', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=kps_9.data_ptr())
+        io_binding.bind_output(name='10', device_type='cpu', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=kps_10.data_ptr())
+        io_binding.bind_output(name='11', device_type='cpu', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=kps_11.data_ptr())
+        io_binding.bind_output(name='12', device_type='cpu', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=kps_12.data_ptr())
 
         self.syncvec.cpu()
         self.swapper_model_kps.run_with_iobinding(io_binding)
@@ -234,20 +234,20 @@ class Models():
             self.swapper_model_swap = onnxruntime.InferenceSession( "./models/inswapper_swap.onnx", providers=self.providers)
 
         io_binding = self.swapper_model_swap.io_binding()
-        io_binding.bind_input(name='target', device_type='cuda', device_id=0, element_type=np.float32, shape=(1, 3, 128, 128), buffer_ptr=image.data_ptr())
-        io_binding.bind_input(name='onnx::Unsqueeze_170', device_type='cuda', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=holder[0].data_ptr())
-        io_binding.bind_input(name='onnx::Unsqueeze_224', device_type='cuda', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=holder[1].data_ptr())
-        io_binding.bind_input(name='onnx::Unsqueeze_278', device_type='cuda', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=holder[2].data_ptr())
-        io_binding.bind_input(name='onnx::Unsqueeze_332', device_type='cuda', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=holder[3].data_ptr())
-        io_binding.bind_input(name='onnx::Unsqueeze_386', device_type='cuda', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=holder[4].data_ptr())
-        io_binding.bind_input(name='onnx::Unsqueeze_440', device_type='cuda', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=holder[5].data_ptr())
-        io_binding.bind_input(name='onnx::Unsqueeze_494', device_type='cuda', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=holder[6].data_ptr())
-        io_binding.bind_input(name='onnx::Unsqueeze_548', device_type='cuda', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=holder[7].data_ptr())
-        io_binding.bind_input(name='onnx::Unsqueeze_602', device_type='cuda', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=holder[8].data_ptr())
-        io_binding.bind_input(name='onnx::Unsqueeze_656', device_type='cuda', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=holder[9].data_ptr())
-        io_binding.bind_input(name='onnx::Unsqueeze_710', device_type='cuda', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=holder[10].data_ptr())
-        io_binding.bind_input(name='onnx::Unsqueeze_764', device_type='cuda', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=holder[11].data_ptr())
-        io_binding.bind_output(name='output', device_type='cuda', device_id=0, element_type=np.float32, shape=(1, 3, 128, 128), buffer_ptr=output.data_ptr())
+        io_binding.bind_input(name='target', device_type='cpu', device_id=0, element_type=np.float32, shape=(1, 3, 128, 128), buffer_ptr=image.data_ptr())
+        io_binding.bind_input(name='onnx::Unsqueeze_170', device_type='cpu', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=holder[0].data_ptr())
+        io_binding.bind_input(name='onnx::Unsqueeze_224', device_type='cpu', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=holder[1].data_ptr())
+        io_binding.bind_input(name='onnx::Unsqueeze_278', device_type='cpu', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=holder[2].data_ptr())
+        io_binding.bind_input(name='onnx::Unsqueeze_332', device_type='cpu', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=holder[3].data_ptr())
+        io_binding.bind_input(name='onnx::Unsqueeze_386', device_type='cpu', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=holder[4].data_ptr())
+        io_binding.bind_input(name='onnx::Unsqueeze_440', device_type='cpu', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=holder[5].data_ptr())
+        io_binding.bind_input(name='onnx::Unsqueeze_494', device_type='cpu', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=holder[6].data_ptr())
+        io_binding.bind_input(name='onnx::Unsqueeze_548', device_type='cpu', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=holder[7].data_ptr())
+        io_binding.bind_input(name='onnx::Unsqueeze_602', device_type='cpu', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=holder[8].data_ptr())
+        io_binding.bind_input(name='onnx::Unsqueeze_656', device_type='cpu', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=holder[9].data_ptr())
+        io_binding.bind_input(name='onnx::Unsqueeze_710', device_type='cpu', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=holder[10].data_ptr())
+        io_binding.bind_input(name='onnx::Unsqueeze_764', device_type='cpu', device_id=0, element_type=np.float16, shape=(1, 2048), buffer_ptr=holder[11].data_ptr())
+        io_binding.bind_output(name='output', device_type='cpu', device_id=0, element_type=np.float32, shape=(1, 3, 128, 128), buffer_ptr=output.data_ptr())
 
         self.syncvec.cpu()
         self.swapper_model_swap.run_with_iobinding(io_binding)
@@ -262,8 +262,8 @@ class Models():
             self.GFPGAN_model = onnxruntime.InferenceSession( "./models/GFPGANv1.4.onnx", providers=self.providers)
 
         io_binding = self.GFPGAN_model.io_binding()
-        io_binding.bind_input(name='input', device_type='cuda', device_id=0, element_type=np.float32, shape=(1,3,512,512), buffer_ptr=image.data_ptr())
-        io_binding.bind_output(name='output', device_type='cuda', device_id=0, element_type=np.float32, shape=(1,3,512,512), buffer_ptr=output.data_ptr())  
+        io_binding.bind_input(name='input', device_type='cpu', device_id=0, element_type=np.float32, shape=(1,3,512,512), buffer_ptr=image.data_ptr())
+        io_binding.bind_output(name='output', device_type='cpu', device_id=0, element_type=np.float32, shape=(1,3,512,512), buffer_ptr=output.data_ptr())  
                 
         self.syncvec.cpu()          
         self.GFPGAN_model.run_with_iobinding(io_binding)                
@@ -274,8 +274,8 @@ class Models():
             self.GPEN_512_model = onnxruntime.InferenceSession( "./models/GPEN-BFR-512.onnx", providers=self.providers)
  
         io_binding = self.GPEN_512_model.io_binding() 
-        io_binding.bind_input(name='input', device_type='cuda', device_id=0, element_type=np.float32, shape=(1,3,512,512), buffer_ptr=image.data_ptr())
-        io_binding.bind_output(name='output', device_type='cuda', device_id=0, element_type=np.float32, shape=(1,3,512,512), buffer_ptr=output.data_ptr())            
+        io_binding.bind_input(name='input', device_type='cpu', device_id=0, element_type=np.float32, shape=(1,3,512,512), buffer_ptr=image.data_ptr())
+        io_binding.bind_output(name='output', device_type='cpu', device_id=0, element_type=np.float32, shape=(1,3,512,512), buffer_ptr=output.data_ptr())            
         
         self.syncvec.cpu()          
         self.GPEN_512_model.run_with_iobinding(io_binding)   
@@ -285,8 +285,8 @@ class Models():
             self.GPEN_256_model = onnxruntime.InferenceSession( "./models/GPEN-BFR-256.onnx", providers=self.providers)
 
         io_binding = self.GPEN_256_model.io_binding()         
-        io_binding.bind_input(name='input', device_type='cuda', device_id=0, element_type=np.float32, shape=(1,3,256,256), buffer_ptr=image.data_ptr())
-        io_binding.bind_output(name='output', device_type='cuda', device_id=0, element_type=np.float32, shape=(1,3,256,256), buffer_ptr=output.data_ptr())
+        io_binding.bind_input(name='input', device_type='cpu', device_id=0, element_type=np.float32, shape=(1,3,256,256), buffer_ptr=image.data_ptr())
+        io_binding.bind_output(name='output', device_type='cpu', device_id=0, element_type=np.float32, shape=(1,3,256,256), buffer_ptr=output.data_ptr())
         
         self.syncvec.cpu()          
         self.GPEN_256_model.run_with_iobinding(io_binding) 
@@ -296,10 +296,10 @@ class Models():
             self.codeformer_model = onnxruntime.InferenceSession( "./models/codeformer_fp16.onnx", providers=self.providers)
 
         io_binding = self.codeformer_model.io_binding() 
-        io_binding.bind_input(name='x', device_type='cuda', device_id=0, element_type=np.float32, shape=(1,3,512,512), buffer_ptr=image.data_ptr())
+        io_binding.bind_input(name='x', device_type='cpu', device_id=0, element_type=np.float32, shape=(1,3,512,512), buffer_ptr=image.data_ptr())
         w = np.array([0.9], dtype=np.double)
         io_binding.bind_cpu_input('w', w)
-        io_binding.bind_output(name='y', device_type='cuda', device_id=0, element_type=np.float32, shape=(1,3,512,512), buffer_ptr=output.data_ptr())
+        io_binding.bind_output(name='y', device_type='cpu', device_id=0, element_type=np.float32, shape=(1,3,512,512), buffer_ptr=output.data_ptr())
         
         self.syncvec.cpu()          
         self.codeformer_model.run_with_iobinding(io_binding)        
@@ -308,13 +308,20 @@ class Models():
         if not self.occluder_model:
             self.occluder_model = onnxruntime.InferenceSession("./models/occluder.onnx", providers=self.providers)
 
-        io_binding = self.occluder_model.io_binding()            
-        io_binding.bind_input(name='img', device_type='cuda', device_id=0, element_type=np.float32, shape=(1,3,256,256), buffer_ptr=image.data_ptr())
-        io_binding.bind_output(name='output', device_type='cuda', device_id=0, element_type=np.float32, shape=(1,1,256,256), buffer_ptr=output.data_ptr())   
+        # Ensure image is on CPU before binding
+        if isinstance(image, torch.Tensor):
+            if image.device.type == 'cuda':
+                image = image.cpu()
+            
+        try:
+            io_binding = self.occluder_model.io_binding()            
+            io_binding.bind_input(name='img', device_type='cpu', device_id=0, element_type=np.float32, shape=(1,3,256,256), buffer_ptr=image.data_ptr())
+            io_binding.bind_output(name='output', device_type='cpu', device_id=0, element_type=np.float32, shape=(1,1,256,256), buffer_ptr=output.data_ptr())   
 
-        # torch.cuda.synchronize('cuda')  
-        self.syncvec.cpu()         
-        self.occluder_model.run_with_iobinding(io_binding)  
+            self.occluder_model.run_with_iobinding(io_binding)  
+        except RuntimeError as e:
+            print(f"Error in run_occluder: {str(e)}")
+            raise
 
 
     def run_faceparser(self, image, output):    
@@ -322,10 +329,9 @@ class Models():
             self.faceparser_model = onnxruntime.InferenceSession("./models/faceparser_fp16.onnx", providers=self.providers)
 
         io_binding = self.faceparser_model.io_binding()            
-        io_binding.bind_input(name='input', device_type='cuda', device_id=0, element_type=np.float32, shape=(1,3,512,512), buffer_ptr=image.data_ptr())
-        io_binding.bind_output(name='out', device_type='cuda', device_id=0, element_type=np.float32, shape=(1,19,512,512), buffer_ptr=output.data_ptr())   
+        io_binding.bind_input(name='input', device_type='cpu', device_id=0, element_type=np.float32, shape=(1,3,512,512), buffer_ptr=image.data_ptr())
+        io_binding.bind_output(name='out', device_type='cpu', device_id=0, element_type=np.float32, shape=(1,19,512,512), buffer_ptr=output.data_ptr())   
 
-        # torch.cuda.synchronize('cuda')  
         self.syncvec.cpu()         
         self.faceparser_model.run_with_iobinding(io_binding)       
     
@@ -514,7 +520,7 @@ class Models():
         img = resize(img)
         img = img.permute(1, 2, 0)
 
-        det_img = torch.zeros((input_size[1], input_size[0], 3), dtype=torch.float32, device='cuda:0')
+        det_img = torch.zeros((input_size[1], input_size[0], 3), dtype=torch.float32, device='cpu')
         det_img[:new_height, :new_width, :] = img
 
         # Switch to BGR and normalize
@@ -527,17 +533,17 @@ class Models():
         det_img = torch.unsqueeze(det_img, 0).contiguous()
 
         io_binding = self.retinaface_model.io_binding()
-        io_binding.bind_input(name='input.1', device_type='cuda', device_id=0, element_type=np.float32, shape=det_img.size(), buffer_ptr=det_img.data_ptr())
+        io_binding.bind_input(name='input.1', device_type='cpu', device_id=0, element_type=np.float32, shape=det_img.size(), buffer_ptr=det_img.data_ptr())
 
-        io_binding.bind_output('448', 'cuda')
-        io_binding.bind_output('471', 'cuda')
-        io_binding.bind_output('494', 'cuda')
-        io_binding.bind_output('451', 'cuda')
-        io_binding.bind_output('474', 'cuda')
-        io_binding.bind_output('497', 'cuda')
-        io_binding.bind_output('454', 'cuda')
-        io_binding.bind_output('477', 'cuda')
-        io_binding.bind_output('500', 'cuda')
+        io_binding.bind_output('448', 'cpu')
+        io_binding.bind_output('471', 'cpu')
+        io_binding.bind_output('494', 'cpu')
+        io_binding.bind_output('451', 'cpu')
+        io_binding.bind_output('474', 'cpu')
+        io_binding.bind_output('497', 'cpu')
+        io_binding.bind_output('454', 'cpu')
+        io_binding.bind_output('477', 'cpu')
+        io_binding.bind_output('500', 'cpu')
 
         # Sync and run model
         self.syncvec.cpu()
@@ -733,8 +739,8 @@ class Models():
         det_img = torch.unsqueeze(det_img, 0).contiguous()
         
         io_binding = self.scrdf_model.io_binding() 
-        device_type = 'cuda' if torch.cuda.is_available() else 'cpu'
-        device_id = 0 if device_type == 'cuda' else None
+        device_type = 'cpu'
+        device_id = 0
         
         io_binding.bind_input(
             name='input.1',
@@ -892,8 +898,8 @@ class Models():
         image = torch.unsqueeze(image, 0).contiguous()
 
         io_binding = self.yoloface_model.io_binding()
-        device_type = 'cuda' if torch.cuda.is_available() else 'cpu'
-        device_id = 0 if device_type == 'cuda' else None
+        device_type = 'cpu'
+        device_id = 0
 
         io_binding.bind_input(
             name='images',
@@ -965,8 +971,8 @@ class Models():
         image = torch.unsqueeze(image, 0).contiguous()
 
         io_binding = self.yoloface_model.io_binding()
-        device_type = 'cuda' if torch.cuda.is_available() else 'cpu'
-        device_id = 0 if device_type == 'cuda' else None
+        device_type = 'cpu'
+        device_id = 0
 
         io_binding.bind_input(
             name='images',
@@ -1211,7 +1217,7 @@ class Models():
         io_binding = self.recognition_model.io_binding() 
         
         # 修改设备绑定方式
-        device_type = 'cuda' if torch.cuda.is_available() else 'cpu'
+        device_type = 'cpu'
         device_id = 0
         
         io_binding.bind_input(
@@ -1276,8 +1282,8 @@ class Models():
         landmarks = torch.empty((1,10752,10), dtype=torch.float32, device=self.device).contiguous()
 
         io_binding = self.resnet50_model.io_binding() 
-        device_type = 'cuda' if torch.cuda.is_available() else 'cpu'
-        device_id = 0 if device_type == 'cuda' else None
+        device_type = 'cpu'
+        device_id = 0
         
         io_binding.bind_input(
             name='input',
@@ -1305,7 +1311,6 @@ class Models():
         )
         
         # _, conf, landmarks = self.resnet_model.run(None, ort_inputs)        
-        torch.cuda.synchronize('cuda')
         self.resnet50_model.run_with_iobinding(io_binding)        
         
 
@@ -1345,7 +1350,7 @@ class Models():
     def _bind_model_io(self, io_binding, input_name, input_tensor, output_names):
         """通用的模型IO绑定方法"""
         # 直接使用字符串类型的设备标识
-        device_type = 'cuda' if torch.cuda.is_available() else 'cpu'
+        device_type = 'cpu'
         device_id = 0
         
         io_binding.bind_input(
